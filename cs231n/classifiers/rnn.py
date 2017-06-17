@@ -147,6 +147,8 @@ class CaptioningRNN(object):
         # Step 3
         if self.cell_type == 'rnn':
             h, rnn_cache = rnn_forward(x, h0, Wx, Wh, b)
+        elif self.cell_type == 'lstm':
+            h, rnn_cache = lstm_forward(x, h0, Wx, Wh, b)
         
         # Step 4
         scores, out_cache = temporal_affine_forward(h, W_vocab, b_vocab)
@@ -163,6 +165,8 @@ class CaptioningRNN(object):
         # Back no step 3
         if self.cell_type == 'rnn':
             dx, dh0, dWx, dWh, db = rnn_backward(dh, rnn_cache)
+        elif self.cell_type == 'lstm':
+            dx, dh0, dWx, dWh, db = lstm_backward(dh, rnn_cache)
             
         # Back no step 2
         dW_embed = word_embedding_backward(dx, cache_embed)
@@ -248,7 +252,7 @@ class CaptioningRNN(object):
         
         # Primeira palavra
         captions[:, 0] = self._start
-        h_prev = h0 # Estado escondido anterior
+        prev_h = h0 # Estado escondido anterior
         prev_c = np.zeros_like(h0)
         
         # Palavra atual
@@ -258,12 +262,16 @@ class CaptioningRNN(object):
         for t in range(max_length):
             # Embed a palavra anterior usando o word embeddings
             word_embed, _ = word_embedding_forward(capt, W_embed)
+
             if self.cell_type == 'rnn':
                 # RNN step
-                h, _ = rnn_forward(word_embed, h_prev, Wx, Wh, b)
+                h, _ = rnn_forward(word_embed, prev_h, Wx, Wh, b)
+            elif self.cell_type == 'lstm':
+                # LSTM step
+                h, c, _ = lstm_step_forward(np.squeeze(word_embed), prev_h, prev_c, Wx, Wh, b)
                 
             # Aplicar a transformação affine no próximo estado
-            scores, _ = temporal_affine_forward(h, W_vocab, b_vocab)
+            scores, _ = temporal_affine_forward(h[:,np.newaxis,:], W_vocab, b_vocab)
             
             # Selecionar a melhor palavra
             idx_best = np.squeeze(np.argmax(scores, axis=2))
